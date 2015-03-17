@@ -1,0 +1,21 @@
+
+apply plugin: 'java'
+apply plugin: 'maven'
+
+version = '0.1-SNAPSHOT'
+group = 'com.lbayer'
+
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+//    compile 'org.slf4j:slf4j-api:1.7.5'
+}
+
+jar {
+    manifest {
+        from "META-INF/MANIFEST.MF"
+    }
+}

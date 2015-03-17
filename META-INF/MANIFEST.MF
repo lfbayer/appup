@@ -1,0 +1,14 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: AppUP application bootstrapper
+Bundle-SymbolicName: com.lbayer.appup
+Bundle-Version: 0.1.0.alpha
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
+Export-Package: org.osgi.framework;version="1.3.0",
+ com.lbayer.appup.registry,
+ com.lbayer.appup.localization,
+ com.lbayer.appup.application,
+ javax.xml.stream,
+ javax.xml.stream.events,
+ javax.xml.stream.util
+Main-Class: com.lbayer.appup.application.AppupLauncher
