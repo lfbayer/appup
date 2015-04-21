@@ -19,13 +19,13 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.ServiceLoader;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.Arrays;
+import java.util.concurrent.Semaphore;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
-import javax.naming.NamingException;
 
 import com.lbayer.appup.registry.AppupInitialContextFactory;
 import com.lbayer.appup.registry.ContribRegistry;
@@ -33,6 +33,10 @@ import com.lbayer.appup.registry.IContribRegistry;
 
 public class AppupLauncher
 {
+    private static final String LIB_PATH = "java.library.path";
+
+    private Semaphore exitSemaphore = new Semaphore(0);
+
     public static void main(String[] args)
     {
         int i = 0;
@@ -52,7 +56,8 @@ public class AppupLauncher
                 configFile = new File(args[i]);
                 if (!configFile.isFile())
                 {
-
+                    System.err.println("No such file: " + configFile);
+                    System.exit(10);
                 }
                 break;
             default:
@@ -65,18 +70,22 @@ public class AppupLauncher
         AppupLauncher launcher = new AppupLauncher();
         try
         {
-            launcher.launch(configFile);
+            System.err.println("Starting.");
+            int result = launcher.launch(configFile, args);
+            System.err.println("Exiting.");
+//            System.exit(result);
         }
         catch (Throwable t)
         {
             System.err.println("Error starting application.");
             t.printStackTrace();
+//            System.exit(1);
         }
     }
 
-    public void launch(File configFile) throws Exception
+    public int launch(File configFile, String[] arguments) throws Exception
     {
-        System.setProperty("appup.startTime", Long.toString(System.currentTimeMillis()));
+        System.setProperty(IAppupRuntime.PROP_STARTTIME, Long.toString(System.currentTimeMillis()));
 
         if (configFile != null)
         {
@@ -86,98 +95,117 @@ public class AppupLauncher
             }
         }
 
-        uriify("osgi.configuration.area");
-        uriify("osgi.install.area");
+        File confDir = new File(System.getProperty(IAppupRuntime.PROP_CONFDIR, "config"));
+        System.setProperty(IAppupRuntime.PROP_CONFDIR, confDir.getAbsolutePath());
+        System.setProperty("osgi.configuration.area", confDir.getCanonicalFile().toURI().toString());
 
-        System.setProperty(Context.INITIAL_CONTEXT_FACTORY, AppupInitialContextFactory.class.getName());
+        File installArea = new File(System.getProperty("osgi.install.area", "."));
+        System.setProperty("osgi.install.area", installArea.getCanonicalFile().toURI().toString());
 
-        if (Boolean.parseBoolean(System.getProperty("appup.clearTmp", "true")))
+        if (System.getProperty(Context.INITIAL_CONTEXT_FACTORY) == null)
         {
-            clearTmpDir();
+            System.setProperty(Context.INITIAL_CONTEXT_FACTORY, AppupInitialContextFactory.class.getName());
         }
 
-        AppupClassLoader runtime = new AppupClassLoader(AppupClassLoader.class.getClassLoader());
+        importProperties();
 
-        Thread.currentThread().setContextClassLoader(runtime);
+        URL[] urls = ((URLClassLoader) getClass().getClassLoader()).getURLs();
+
+        File libsDir = new File(System.getProperty(IAppupRuntime.PROP_LIBDIR, ".lib"));
+        libsDir.mkdirs();
+        System.setProperty(LIB_PATH, libsDir.getPath() + File.pathSeparator + System.getProperty(LIB_PATH));
+
+        NativeCodeManager nativeCodeManager = new NativeCodeManager(libsDir);
+        nativeCodeManager.initialize(urls);
+
+        System.setProperty("osgi.os", NativeCodeManager.OS);
+        System.setProperty("osgi.arch", NativeCodeManager.ARCH);
+
+        ContribRegistry contribRegistry = new ContribRegistry(getClass().getClassLoader());
+        contribRegistry.initializeFromClassLoader();
 
         InitialContext ctxt = new InitialContext();
-        ctxt.bind(IContribRegistry.class.getName(), new ContribRegistry(runtime));
-        ctxt.bind(IAppupRuntime.class.getName(), runtime);
+        ctxt.bind(IContribRegistry.class.getName(), contribRegistry);
 
-        String cp = System.getProperty("appup.cp");
-        if (cp != null)
-        {
-            List<File> toStart = new ArrayList<>();
-            for (String entry : cp.split(","))
-            {
-                String[] s = entry.split("@");
-                File file = new File(s[0]);
-                if (s.length > 1)
-                {
-                    toStart.add(file);
-                }
+        String[] classnames = getInterpolatedSystemProperty(IAppupRuntime.PROP_STARTCLASSES).split(",");
+        AppupLifecycle lifecycle = new AppupLifecycle(getClass().getClassLoader(), Arrays.asList(classnames));
+        lifecycle.setErrorHandler((name, t) -> {
+            System.err.println("Error in " + name);
+            t.printStackTrace();
+        });
 
-                runtime.install(file);
-            }
-
-            toStart.stream().forEachOrdered(runtime::start);
-        }
-
-        List<IApplication> applications = new ArrayList<>();
-        ServiceLoader.load(IApplication.class, runtime).forEach(applications::add);
-
-        for (IApplication application : applications)
-        {
-            application.start(runtime);
-        }
-
-        for (IApplication application : applications)
-        {
-            application.stop();
-        }
-    }
-
-    private static void uriify(String prop)
-    {
         try
         {
-            String orig = System.getProperty(prop);
-            File file = new File(orig);
-            String value = file.getCanonicalFile().toURI().toString();
-            System.setProperty(prop, value);
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                try
+                {
+                    // hold shutdown until the main thread has exited
+                    exitSemaphore.acquire();
+                }
+                catch (InterruptedException e)
+                {
+                    e.printStackTrace();
+                }
+            }));
 
-            System.err.println(String.format("Overwrote property %s: %s -> %s", prop, orig, value));
+            lifecycle.start();
+            lifecycle.stop();
+
+            return 0;
         }
-        catch (IOException e)
+        finally
         {
-            throw new RuntimeException(e);
+            exitSemaphore.release();
         }
     }
 
-    /**
-     * Delete all of the immediate children of java.io.tmpdir
-     */
-    private static void clearTmpDir()
+    private void importProperties() throws IOException
     {
-        String tmpDir = System.getProperty("java.io.tmpdir");
-        if (tmpDir != null)
+        String propertyFiles = System.getProperty("appup.propertiesFiles");
+        if (propertyFiles != null)
         {
-            File file = new File(tmpDir);
-            File[] listFiles = file.listFiles();
-            if (listFiles != null)
+            for (String entry : propertyFiles.split(","))
             {
-                for (File tmp : listFiles)
+                File file = new File(interpolateString(entry));
+                try (InputStream in = new FileInputStream(file))
                 {
-                    try
-                    {
-                        tmp.delete();
-                    }
-                    catch (Throwable t)
-                    {
-                        // do nothing.
-                    }
+                    System.getProperties().load(in);
                 }
             }
         }
+    }
+
+    private static String getInterpolatedSystemProperty(String prop)
+    {
+        return interpolateString(System.getProperty(prop, ""));
+    }
+
+    private static String interpolateString(String input)
+    {
+        StringBuilder result = new StringBuilder();
+
+        int index = 0;
+        int start;
+
+        while ((start = input.indexOf('{', index)) >= 0)
+        {
+            result.append(input.substring(index, start));
+
+            int end = input.indexOf('}', start);
+            if (end <= start)
+            {
+                throw new IllegalArgumentException("Bad configuration string: " + input);
+            }
+
+            String prop = input.substring(start + 1, end);
+
+            result.append(System.getProperty(prop, ""));
+
+            index = end + 1;
+        }
+
+        result.append(input.substring(index));
+
+        return result.toString();
     }
 }

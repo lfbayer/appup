@@ -1,21 +1,27 @@
 
-apply plugin: 'java'
-apply plugin: 'maven'
+defaultTasks 'build'
 
-version = '0.1-SNAPSHOT'
+apply plugin: 'java'
+apply plugin: 'maven-publish'
+
+version = '0.1'
 group = 'com.lbayer'
 
 
+
 repositories {
+    mavenLocal()
     jcenter()
 }
 
 dependencies {
-//    compile 'org.slf4j:slf4j-api:1.7.5'
+    compile 'org.slf4j:slf4j-api:1.7.5'
 }
 
-jar {
-    manifest {
-        from "META-INF/MANIFEST.MF"
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
     }
 }

@@ -15,14 +15,7 @@
  */
 package com.lbayer.appup.registry;
 
-import java.io.InputStream;
-
-import org.osgi.framework.Bundle;
-
-
 public interface IContribRegistry
 {
     IContribElement[] getContribElementsFor(String contribTypeId);
-
-    void register(Bundle bundle, InputStream pluginConfig);
 }

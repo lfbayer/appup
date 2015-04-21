@@ -17,14 +17,15 @@ package com.lbayer.appup.registry;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
-import org.osgi.framework.Bundle;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -44,13 +45,35 @@ public class ContribRegistry implements IContribRegistry
         this.classLoader = classLoader;
     }
 
+    public void initializeFromClassLoader() throws IOException
+    {
+        initializeResources("META-INF/plugin.xml");
+        initializeResources("plugin.xml");
+    }
+
+    private void initializeResources(String name) throws IOException
+    {
+        Enumeration<URL> urls = classLoader.getResources(name);
+        while (urls.hasMoreElements())
+        {
+            URL url = urls.nextElement();
+            try (InputStream in = url.openStream())
+            {
+                System.err.println("========================================================");
+                System.err.println("URL IS HERE: " + url);
+                register(url, url.toString(), in);
+            }
+        }
+    }
+
     @Override
     public IContribElement[] getContribElementsFor(String contribTypeId)
     {
         List<IContribElement> results = new ArrayList<>();
         for (Document dom : doms)
         {
-            Bundle bundle = (Bundle) dom.getUserData("appup.bundle");
+            String owner = (String) dom.getUserData("appup.contrib.owner");
+            URL ownerURL = (URL) dom.getUserData("appup.contrib.ownerURL");
 
             NodeList extensions = dom.getElementsByTagName("extension"); // .getChildNodes();
             for (int j = 0; j < extensions.getLength(); j++)
@@ -65,7 +88,7 @@ public class ContribRegistry implements IContribRegistry
                         Node elem = children.item(k);
                         if (elem.getNodeType() == Node.ELEMENT_NODE)
                         {
-                            results.add(new ContribElement(bundle, elem));
+                            results.add(new ContribElement(ownerURL, owner, elem));
                         }
                     }
                 }
@@ -75,13 +98,14 @@ public class ContribRegistry implements IContribRegistry
         return results.toArray(new IContribElement[results.size()]);
     }
 
-    public void register(Bundle bundle, InputStream pluginConfig)
+    public void register(URL ownerURL, String owner, InputStream pluginConfig)
     {
         try
         {
             DocumentBuilder db = DocumentBuilderFactory.newInstance().newDocumentBuilder();
             Document dom = db.parse(pluginConfig);
-            dom.setUserData("appup.bundle", bundle, null);
+            dom.setUserData("appup.contrib.owner", owner, null);
+            dom.setUserData("appup.contrib.ownerURL", ownerURL, null);
             doms.add(dom);
         }
         catch (ParserConfigurationException | SAXException | IOException e)
@@ -92,25 +116,27 @@ public class ContribRegistry implements IContribRegistry
 
     private class ContribElement implements IContribElement
     {
-        private Node node;
-        private Bundle bundle;
+        private final Node node;
+        private final String owner;
+        private final URL ownerURL;
 
-        public ContribElement(Bundle bundle, Node node)
+        public ContribElement(URL ownerURL, String owner, Node node)
         {
-            this.bundle = bundle;
+            this.ownerURL = ownerURL;
+            this.owner = owner;
             this.node = node;
+        }
+
+        @Override
+        public URL getOwnerURL()
+        {
+            return ownerURL;
         }
 
         @Override
         public String getOwner()
         {
-            return bundle.getSymbolicName();
-        }
-
-        @Override
-        public Bundle getBundle()
-        {
-            return bundle;
+            return owner;
         }
 
         @Override
@@ -182,7 +208,7 @@ public class ContribRegistry implements IContribRegistry
                 Node child = children.item(j);
                 if (child.getNodeType() == Node.ELEMENT_NODE)
                 {
-                    results.add(new ContribElement(bundle, children.item(j)));
+                    results.add(new ContribElement(ownerURL, owner, children.item(j)));
                 }
             }
 

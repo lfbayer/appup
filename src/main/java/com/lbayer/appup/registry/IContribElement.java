@@ -15,14 +15,12 @@
  */
 package com.lbayer.appup.registry;
 
-import org.osgi.framework.Bundle;
+import java.net.URL;
 
 public interface IContribElement
 {
     String getOwner();
-
-    @Deprecated
-    Bundle getBundle();
+    URL getOwnerURL();
 
     String getAttribute(String name);
     <T> T createInstance(String name) throws ContribException;

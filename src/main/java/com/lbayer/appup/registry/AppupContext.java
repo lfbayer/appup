@@ -21,6 +21,8 @@ import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.naming.Binding;
@@ -130,6 +132,24 @@ class AppupContext implements Context, EventContext
             }
         }
 
+        try
+        {
+            Class<?> clazz = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+            ServiceLoader<?> services = ServiceLoader.load(clazz);
+            Iterator<?> iter = services.iterator();
+            if (iter.hasNext())
+            {
+                Object service = iter.next();
+                bind(name, service);
+                return service;
+            }
+        }
+        catch (ClassNotFoundException e)
+        {
+            LOGGER.log(Level.WARNING, "Can't load class: " + name, e);
+            throw new NameNotFoundException(name);
+        }
+
         throw new NameNotFoundException(name);
     }
 
@@ -210,7 +230,7 @@ class AppupContext implements Context, EventContext
             }
         }
     }
-    
+
     @Override
     public NamingEnumeration<Binding> listBindings(Name name) throws NamingException
     {
@@ -271,13 +291,13 @@ class AppupContext implements Context, EventContext
     @Override
     public void destroySubcontext(Name name) throws NamingException
     {
-        throw new UnsupportedOperationException();            
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public void destroySubcontext(String name) throws NamingException
     {
-        throw new UnsupportedOperationException();        
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -351,7 +371,6 @@ class AppupContext implements Context, EventContext
     {
         throw new UnsupportedOperationException();
     }
-
 
     private static class RegistrationEnumeration implements NamingEnumeration<Binding>
     {

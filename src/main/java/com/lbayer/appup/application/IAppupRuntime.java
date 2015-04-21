@@ -19,7 +19,14 @@ import java.io.File;
 
 public interface IAppupRuntime
 {
+    String PROP_STARTTIME = "appup.startTime";
+    String PROP_CONFDIR = "appup.confDir";
+    String PROP_LIBDIR = "appup.libDir";
+    String PROP_STARTCLASSES = "appup.startClasses";
+
+    String[] getArguments();
+
     void install(File file);
-    void start(File file) throws Exception;
-    void stop(File file) throws Exception;
+    void start(String name) throws Exception;
+    void stop(String name) throws Exception;
 }
