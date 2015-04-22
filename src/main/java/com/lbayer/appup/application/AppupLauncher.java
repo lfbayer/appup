@@ -70,9 +70,7 @@ public class AppupLauncher
         AppupLauncher launcher = new AppupLauncher();
         try
         {
-            System.err.println("Starting.");
             int result = launcher.launch(configFile, args);
-            System.err.println("Exiting.");
 //            System.exit(result);
         }
         catch (Throwable t)

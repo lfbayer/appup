@@ -17,7 +17,9 @@ package com.lbayer.appup.registry;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -59,9 +61,12 @@ public class ContribRegistry implements IContribRegistry
             URL url = urls.nextElement();
             try (InputStream in = url.openStream())
             {
-                System.err.println("========================================================");
-                System.err.println("URL IS HERE: " + url);
-                register(url, url.toString(), in);
+                URLConnection conn = url.openConnection();
+                if (conn instanceof JarURLConnection)
+                {
+                    URL jarUrl = ((JarURLConnection) conn).getJarFileURL();
+                    register(jarUrl, jarUrl.toString(), in);
+                }
             }
         }
     }
@@ -213,6 +218,12 @@ public class ContribRegistry implements IContribRegistry
             }
 
             return results.toArray(new IContribElement[results.size()]);
+        }
+
+        @Override
+        public String toString()
+        {
+            return getName() + " : " + getOwnerURL();
         }
     }
 }

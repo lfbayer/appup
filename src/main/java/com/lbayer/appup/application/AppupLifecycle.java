@@ -29,9 +29,6 @@ import javax.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Created by lbayer on 4/16/15.
- */
 public class AppupLifecycle
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(AppupLifecycle.class);
@@ -68,7 +65,7 @@ public class AppupLifecycle
                     Class<?> clazz = classLoader.loadClass(lifecycleName);
                     Object instance = clazz.newInstance();
                     lifecycleInstances.add(instance);
-                    LOGGER.info("Added lifecycle: " + lifecycleName);
+                    LOGGER.debug("Added lifecycle: {}", lifecycleName);
                 }
                 catch (Throwable t)
                 {
