@@ -213,7 +213,10 @@ public class ContribRegistry implements IContribRegistry
                 Node child = children.item(j);
                 if (child.getNodeType() == Node.ELEMENT_NODE)
                 {
-                    results.add(new ContribElement(ownerURL, owner, children.item(j)));
+                    if (string == null || child.getNodeName().equals(string))
+                    {
+                        results.add(new ContribElement(ownerURL, owner, children.item(j)));
+                    }
                 }
             }
 

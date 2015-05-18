@@ -4,7 +4,7 @@ defaultTasks 'build'
 apply plugin: 'java'
 apply plugin: 'maven-publish'
 
-version = '0.1'
+version = '0.1.1'
 group = 'com.lbayer'
 
 
