@@ -30,6 +30,8 @@ import javax.naming.InitialContext;
 import com.lbayer.appup.registry.AppupInitialContextFactory;
 import com.lbayer.appup.registry.ContribRegistry;
 import com.lbayer.appup.registry.IContribRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AppupLauncher
 {
@@ -70,14 +72,11 @@ public class AppupLauncher
         AppupLauncher launcher = new AppupLauncher();
         try
         {
-            int result = launcher.launch(configFile, args);
-//            System.exit(result);
+            launcher.launch(configFile, args);
         }
         catch (Throwable t)
         {
-            System.err.println("Error starting application.");
-            t.printStackTrace();
-//            System.exit(1);
+            logError("Error starting application.", t);
         }
     }
 
@@ -128,8 +127,7 @@ public class AppupLauncher
         String[] classnames = getInterpolatedSystemProperty(IAppupRuntime.PROP_STARTCLASSES).split(",");
         AppupLifecycle lifecycle = new AppupLifecycle(getClass().getClassLoader(), Arrays.asList(classnames));
         lifecycle.setErrorHandler((name, t) -> {
-            System.err.println("Error in " + name);
-            t.printStackTrace();
+            logError("Error in " + name, t);
         });
 
         try
@@ -205,5 +203,21 @@ public class AppupLauncher
         result.append(input.substring(index));
 
         return result.toString();
+    }
+
+    private static void logError(String message, Throwable t)
+    {
+        System.err.println(message);
+        t.printStackTrace();
+
+        try
+        {
+            LoggerFactory.getLogger(AppupLauncher.class).error(message, t);
+        }
+        catch (Throwable e)
+        {
+            System.err.println("Unable to write error to logger.");
+            e.printStackTrace();
+        }
     }
 }

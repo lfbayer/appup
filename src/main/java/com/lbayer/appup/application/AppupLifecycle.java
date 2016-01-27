@@ -60,6 +60,11 @@ public class AppupLifecycle
             lifecycleInstances = new ArrayList<>();
             for (String lifecycleName : lifecycleNames)
             {
+                if (lifecycleName == null || lifecycleName.isEmpty())
+                {
+                    throw new RuntimeException("Empty lifecycleName");
+                }
+
                 try
                 {
                     Class<?> clazz = classLoader.loadClass(lifecycleName);
@@ -75,7 +80,7 @@ public class AppupLifecycle
                     }
                     else
                     {
-                        throw new RuntimeException(t);
+                        throw new RuntimeException("Unable to load lifecycle class: " + lifecycleName, t);
                     }
                 }
             }
