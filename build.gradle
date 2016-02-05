@@ -2,16 +2,31 @@
 defaultTasks 'build'
 
 apply plugin: 'java'
+apply plugin: 'maven'
+apply plugin: 'signing'
 apply plugin: 'maven-publish'
 
-version = '0.1.1'
 group = 'com.lbayer'
-
-
+archivesBaseName = 'appup'
+version = '0.1.3'
 
 repositories {
     mavenLocal()
     jcenter()
+}
+
+task javadocJar(type: Jar) {
+    classifier = 'javadoc'
+    from javadoc
+}
+
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+artifacts {
+    archives javadocJar, sourcesJar
 }
 
 dependencies {
@@ -22,6 +37,55 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             from components.java
+        }
+    }
+}
+
+signing {
+    sign configurations.archives
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+            repository(url: "https://oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                authentication(userName: ossrhUsername, password: ossrhPassword)
+            }
+
+            snapshotRepository(url: "https://oss.sonatype.org/content/repositories/snapshots/") {
+                authentication(userName: ossrhUsername, password: ossrhPassword)
+            }
+
+            pom.project {
+                name 'Appup Java Bootstrap'
+                packaging 'jar'
+                // optionally artifactId can be defined here
+                description 'Java application bootstrapping library'
+                url 'https://github.com/lfbayer/appup'
+
+                scm {
+                    connection 'https://github.com/lfbayer/appup.git'
+                    developerConnection 'git@github.com:lfbayer/appup.git'
+                    url 'https://github.com/lfbayer/appup'
+                }
+
+                licenses {
+                    license {
+                        name 'The Apache License, Version 2.0'
+                        url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id 'lfbayer'
+                        name 'Leo Bayer'
+                        email 'lfbayer@gmail.com'
+                    }
+                }
+            }
         }
     }
 }
