@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Leo Bayer
+ * Copyright (C) 2016 Leo Bayer
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 package com.lbayer.appup.application;
 
-import java.io.File;
-
 public interface IAppupRuntime
 {
     String PROP_STARTTIME = "appup.startTime";
@@ -24,9 +22,5 @@ public interface IAppupRuntime
     String PROP_LIBDIR = "appup.libDir";
     String PROP_STARTCLASSES = "appup.startClasses";
 
-    String[] getArguments();
-
-    void install(File file);
-    void start(String name) throws Exception;
-    void stop(String name) throws Exception;
+    void exit(int exitCode);
 }
