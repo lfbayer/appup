@@ -138,11 +138,11 @@ public class AppupLauncher implements IAppupRuntime
                 logError("Error in " + name, t);
             });
 
-            lifecycle.start();
-
-            startedSemaphore.release();
-
-            shutdownSemaphore.acquire();
+            if (lifecycle.start())
+            {
+                startedSemaphore.release();
+                shutdownSemaphore.acquire();
+            }
 
             lifecycle.stop();
 

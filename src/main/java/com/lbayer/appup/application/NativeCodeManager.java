@@ -20,10 +20,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.annotation.Native;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.jar.Attributes;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
@@ -38,31 +42,40 @@ public class NativeCodeManager
 
     public static final String OS;
     public static final String ARCH;
+    private static final String OS_NAME;
+    private static final String ARCH_NAME;
 
     private final File destinationDir;
 
     static
     {
-        String os = System.getProperty("os.name");
-        if (os.startsWith("Mac"))
+        OS_NAME = System.getProperty("os.name").toLowerCase();
+        if (OS_NAME.startsWith("mac"))
         {
             OS = "macosx";
         }
-        else if (os.startsWith("Windows"))
+        else if (OS_NAME.startsWith("windows"))
         {
             OS = "win32";
         }
-        else if (os.toLowerCase().startsWith("linux"))
+        else if (OS_NAME.startsWith("linux"))
         {
             OS = "linux";
         }
         else
         {
-            OS = os;
+            OS = OS_NAME;
         }
 
-        String arch = System.getProperty("os.arch");
-        ARCH = arch;
+        ARCH_NAME = System.getProperty("os.arch").toLowerCase();
+        if (ARCH_NAME.equals("amd64"))
+        {
+            ARCH = "x86_64";
+        }
+        else
+        {
+            ARCH = ARCH_NAME;
+        }
     }
 
     public NativeCodeManager(File destinationDir)
@@ -102,35 +115,44 @@ public class NativeCodeManager
         }
 
         Attributes attrs = manifest.getMainAttributes();
-
         String nativeCode = attrs.getValue("Bundle-NativeCode");
         if (nativeCode != null)
         {
             LOGGER.debug("Loading native code ({})...", jf.getName());
 
-            String[] codes = nativeCode.split(",");
-            for (String codeEntry : codes)
+            importNativeCodeEntries(jf, nativeCode);
+        }
+    }
+
+    private void importNativeCodeEntries(JarFile jf, String nativeCode) throws IOException
+    {
+        String[] codes = nativeCode.split(",");
+        for (String codeEntry : codes)
+        {
+            String[] libAndExpression = codeEntry.split(";", 2);
+            String libFile = libAndExpression[0];
+
+            if (libAndExpression.length < 2 || NativeCodeRestriction.matches(libAndExpression[1]))
             {
-                if (codeEntry.contains(OS) && codeEntry.contains(ARCH))
-                {
-                    LOGGER.debug("Native code matches ({})...", codeEntry);
-
-                    String libFile = codeEntry.split(";", 2)[0];
-                    LOGGER.debug("Extracting library ({})...", libFile);
-                    ZipEntry libEntry = jf.getEntry(libFile);
-
-                    if (libEntry == null)
-                    {
-                        throw new RuntimeException(String.format("File '%s' was not found in '%s'", libFile, jf.getName()));
-                    }
-
-                    File tmpLibFile = new File(destinationDir, new File(libEntry.getName()).getName());
-                    tmpLibFile.deleteOnExit();
-
-                    copy(jf, libEntry, tmpLibFile);
-                }
+                importLibrary(jf, libFile);
             }
         }
+    }
+
+    private void importLibrary(JarFile jf, String libFile) throws IOException
+    {
+        LOGGER.debug("Extracting library ({})...", libFile);
+
+        ZipEntry libEntry = jf.getEntry(libFile);
+        if (libEntry == null)
+        {
+            throw new RuntimeException(String.format("File '%s' was not found in '%s'", libFile, jf.getName()));
+        }
+
+        File tmpLibFile = new File(destinationDir, new File(libEntry.getName()).getName());
+        tmpLibFile.deleteOnExit();
+
+        copy(jf, libEntry, tmpLibFile);
     }
 
     private static void copy(JarFile jf, ZipEntry entry, File output) throws IOException
@@ -143,6 +165,58 @@ public class NativeCodeManager
             {
                 out.write(buf, 0, len);
             }
+        }
+    }
+
+    private static boolean matchesEitherRestriction(Set<String> restriction, String match, String match2)
+    {
+        return restriction.isEmpty() || restriction.contains(match) || restriction.contains(match2);
+    }
+
+    public static class NativeCodeRestriction
+    {
+        public static boolean matches(String clauseString)
+        {
+            Set<String> archRestrictions = new HashSet<>();
+            Set<String> osRestrictions = new HashSet<>();
+
+            // parse the restrictions
+            for (String restriction : clauseString.split(";"))
+            {
+                String[] keyValue = restriction.split("=", 2);
+                if (keyValue.length != 2)
+                {
+                    continue;
+                }
+
+                String key = keyValue[0].trim();
+                String value = keyValue[1].trim().toLowerCase();
+                if (value.startsWith("\""))
+                {
+                    value = value.substring(1);
+                }
+
+                if (value.endsWith("\""))
+                {
+                    value = value.substring(0, value.length() - 1);
+                }
+
+                switch (key)
+                {
+                case "osname":
+                    osRestrictions.add(value);
+                    break;
+
+                case "processor":
+                    archRestrictions.add(value);
+                    break;
+
+                default:
+                    break;
+                }
+            }
+
+            return matchesEitherRestriction(osRestrictions, OS, OS_NAME) && matchesEitherRestriction(archRestrictions, ARCH, ARCH_NAME);
         }
     }
 }

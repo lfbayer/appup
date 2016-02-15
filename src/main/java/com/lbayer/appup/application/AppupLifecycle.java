@@ -46,12 +46,19 @@ public class AppupLifecycle
         this.lifecycleNames = lifecycleNames;
     }
 
-    public void start()
+    /**
+     * Instantiate all lifecycles and then execute all {@link PostConstruct} methods on each instance.
+     *
+     * @return <code>true</code> if all lifecycle classes started successful, <code>false</code> if there were any failures
+     */
+    public boolean start()
     {
         if (startedInstances != null)
         {
             throw new IllegalStateException("Lifecycle already started");
         }
+
+        boolean success = true;
 
         startedInstances = new ArrayList<>();
 
@@ -65,15 +72,25 @@ public class AppupLifecycle
                     throw new RuntimeException("Empty lifecycleName");
                 }
 
+                String[] props = lifecycleName.split(";", 2);
+                String className = props[0];
+                if (props.length > 1 && !NativeCodeManager.NativeCodeRestriction.matches(props[1]))
+                {
+                    LOGGER.debug("Skipping lifecycle: {}", lifecycleName);
+                    continue;
+                }
+
                 try
                 {
-                    Class<?> clazz = classLoader.loadClass(lifecycleName);
+                    Class<?> clazz = classLoader.loadClass(className);
                     Object instance = clazz.newInstance();
                     lifecycleInstances.add(instance);
                     LOGGER.debug("Added lifecycle: {}", lifecycleName);
                 }
                 catch (Throwable t)
                 {
+                    success = false;
+
                     if (errorHandler != null)
                     {
                         errorHandler.accept(lifecycleName, t);
@@ -95,12 +112,19 @@ public class AppupLifecycle
             }
             catch (Throwable t)
             {
+                success = false;
                 if (errorHandler != null)
                 {
                     errorHandler.accept(lifecycleInstance.getClass().getName(), t);
                 }
+                else
+                {
+                    LOGGER.error("Error starting lifecycle instance " + lifecycleInstance.getClass().getName(), t);
+                }
             }
         }
+
+        return success;
     }
 
     public void setErrorHandler(BiConsumer<String, Throwable> errorHandler)
@@ -108,6 +132,11 @@ public class AppupLifecycle
         this.errorHandler = errorHandler;
     }
 
+    /**
+     * Execute the {@link PreDestroy} methods on the lifecycle instances that were successfully started using the {@link #start()} method.
+     *
+     * Lifecycles instances are stopped in reverse order.
+     */
     public void stop()
     {
         if (startedInstances == null)
@@ -129,7 +158,10 @@ public class AppupLifecycle
                 {
                     errorHandler.accept(object.getClass().getName(), t);
                 }
-
+                else
+                {
+                    LOGGER.error("Error stopping lifecycle instance " + object.getClass().getName(), t);
+                }
             }
         }
     }
