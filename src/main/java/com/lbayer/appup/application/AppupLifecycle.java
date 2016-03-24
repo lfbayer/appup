@@ -26,6 +26,7 @@ import java.util.function.BiConsumer;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
+import com.lbayer.appup.internal.InjectionElf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,6 +108,8 @@ public class AppupLifecycle
         {
             try
             {
+                InjectionElf.injectResources(lifecycleInstance);
+
                 invokeMethodsWithAnnotation(PostConstruct.class, lifecycleInstance);
                 startedInstances.add(lifecycleInstance);
             }

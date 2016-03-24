@@ -15,6 +15,7 @@
  */
 package com.lbayer.appup.registry;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Hashtable;
@@ -26,6 +27,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.naming.Binding;
+import javax.naming.ConfigurationException;
 import javax.naming.Context;
 import javax.naming.Name;
 import javax.naming.NameClassPair;
@@ -37,6 +39,8 @@ import javax.naming.event.EventContext;
 import javax.naming.event.NamingEvent;
 import javax.naming.event.NamingListener;
 import javax.naming.event.ObjectChangeListener;
+
+import com.lbayer.appup.internal.InjectionElf;
 
 class AppupContext implements Context, EventContext
 {
@@ -140,6 +144,18 @@ class AppupContext implements Context, EventContext
             if (iter.hasNext())
             {
                 Object service = iter.next();
+
+                // TODO: check or handle cyclic dependencies here.
+                try
+                {
+                    InjectionElf.injectResources(service);
+                }
+                catch (IllegalAccessException | InvocationTargetException e)
+                {
+                    LOGGER.log(Level.WARNING, "Can't initialize instance for class: " + name, e);
+                    throw new ConfigurationException("Unable to inject resources into instance: " + service);
+                }
+
                 bind(name, service);
                 return service;
             }
