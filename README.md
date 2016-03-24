@@ -1,7 +1,7 @@
 # appup
 A Java application bootstrap library
 
-##### Overview
+#### Overview
 Appup provides
 
 - Application startup and lifecycle management
@@ -20,8 +20,12 @@ Appup provides
 
 #### Usage
 
-Appup is executed by running the AppupLauncher as your class and passing it a configuration file
+Appup is executed by running the AppupLauncher as your class and passing it a configuration file.
+
+For example:
+```
 java -cp libs/* com.lbayer.appup.application.AppupLauncher -c config.ini
+```
 
 #### Configuration File
 
