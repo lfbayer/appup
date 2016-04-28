@@ -15,6 +15,7 @@
  */
 package com.lbayer.appup.internal;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.logging.Logger;
@@ -33,6 +34,17 @@ public final class InjectionElf
     private InjectionElf()
     {
 
+    }
+
+    public static void invokeMethodsWithAnnotation(Class<? extends Annotation> annotation, Object object) throws InvocationTargetException, IllegalAccessException
+    {
+        for (Method m : object.getClass().getMethods())
+        {
+            if (m.getAnnotation(annotation) != null)
+            {
+                m.invoke(object);
+            }
+        }
     }
 
     /**

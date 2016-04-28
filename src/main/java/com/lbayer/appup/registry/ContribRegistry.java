@@ -17,6 +17,7 @@ package com.lbayer.appup.registry;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
@@ -24,10 +25,12 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
+import javax.naming.NamingException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import com.lbayer.appup.internal.InjectionElf;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -168,9 +171,11 @@ public class ContribRegistry implements IContribRegistry
         {
             try
             {
-                return (T) createClass(name).newInstance();
+                T instance = (T) createClass(name).newInstance();
+                InjectionElf.injectResources(instance);
+                return instance;
             }
-            catch (InstantiationException | IllegalAccessException e)
+            catch (InstantiationException | IllegalAccessException | InvocationTargetException | NamingException e)
             {
                 throw new ContribException(e);
             }

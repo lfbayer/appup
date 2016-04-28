@@ -30,6 +30,9 @@ import com.lbayer.appup.internal.InjectionElf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.lbayer.appup.internal.InjectionElf.injectResources;
+import static com.lbayer.appup.internal.InjectionElf.invokeMethodsWithAnnotation;
+
 public class AppupLifecycle
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(AppupLifecycle.class);
@@ -108,7 +111,7 @@ public class AppupLifecycle
         {
             try
             {
-                InjectionElf.injectResources(lifecycleInstance);
+                injectResources(lifecycleInstance);
 
                 invokeMethodsWithAnnotation(PostConstruct.class, lifecycleInstance);
                 startedInstances.add(lifecycleInstance);
@@ -165,17 +168,6 @@ public class AppupLifecycle
                 {
                     LOGGER.error("Error stopping lifecycle instance " + object.getClass().getName(), t);
                 }
-            }
-        }
-    }
-
-    private static void invokeMethodsWithAnnotation(Class<? extends Annotation> annotation, Object object) throws InvocationTargetException, IllegalAccessException
-    {
-        for (Method m : object.getClass().getMethods())
-        {
-            if (m.getAnnotation(annotation) != null)
-            {
-                m.invoke(object);
             }
         }
     }

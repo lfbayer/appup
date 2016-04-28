@@ -18,15 +18,19 @@ package com.lbayer.appup.registry;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.annotation.PostConstruct;
 import javax.naming.Binding;
+import javax.naming.CompositeName;
 import javax.naming.ConfigurationException;
 import javax.naming.Context;
 import javax.naming.Name;
@@ -40,7 +44,8 @@ import javax.naming.event.NamingEvent;
 import javax.naming.event.NamingListener;
 import javax.naming.event.ObjectChangeListener;
 
-import com.lbayer.appup.internal.InjectionElf;
+import static com.lbayer.appup.internal.InjectionElf.injectResources;
+import static com.lbayer.appup.internal.InjectionElf.invokeMethodsWithAnnotation;
 
 class AppupContext implements Context, EventContext
 {
@@ -48,6 +53,8 @@ class AppupContext implements Context, EventContext
 
     private Map<String, List<AppupContext.Registration>> registrations;
     private Map<String, List<ObjectChangeListener>> listeners;
+
+    private ThreadLocal<Set<String>> currentLookups = ThreadLocal.withInitial(HashSet::new);
 
     public AppupContext()
     {
@@ -136,6 +143,11 @@ class AppupContext implements Context, EventContext
             }
         }
 
+        if (!currentLookups.get().add(name))
+        {
+            throw new ConfigurationException("Resource dependency cycle detected for object: " + name);
+        }
+
         try
         {
             Class<?> clazz = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
@@ -145,10 +157,10 @@ class AppupContext implements Context, EventContext
             {
                 Object service = iter.next();
 
-                // TODO: check or handle cyclic dependencies here.
                 try
                 {
-                    InjectionElf.injectResources(service);
+                    injectResources(service);
+                    invokeMethodsWithAnnotation(PostConstruct.class, service);
                 }
                 catch (IllegalAccessException | InvocationTargetException e)
                 {
@@ -164,6 +176,10 @@ class AppupContext implements Context, EventContext
         {
             LOGGER.log(Level.WARNING, "Can't load class: " + name, e);
             throw new NameNotFoundException(name);
+        }
+        finally
+        {
+            currentLookups.get().remove(name);
         }
 
         throw new NameNotFoundException(name);
@@ -269,6 +285,18 @@ class AppupContext implements Context, EventContext
     }
 
     @Override
+    public NameParser getNameParser(Name name) throws NamingException
+    {
+        return AppupNameParser.NAME_PARSER;
+    }
+
+    @Override
+    public NameParser getNameParser(String name) throws NamingException
+    {
+        return AppupNameParser.NAME_PARSER;
+    }
+
+    @Override
     public void rebind(Name name, Object obj) throws NamingException
     {
         throw new UnsupportedOperationException();
@@ -336,18 +364,6 @@ class AppupContext implements Context, EventContext
 
     @Override
     public Object lookupLink(String name) throws NamingException
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public NameParser getNameParser(Name name) throws NamingException
-    {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public NameParser getNameParser(String name) throws NamingException
     {
         throw new UnsupportedOperationException();
     }
@@ -424,6 +440,17 @@ class AppupContext implements Context, EventContext
         @Override
         public void close() throws NamingException
         {
+        }
+    }
+
+    private static class AppupNameParser implements NameParser
+    {
+        private static final AppupNameParser NAME_PARSER = new AppupNameParser();
+
+        @Override
+        public Name parse(String name) throws NamingException
+        {
+            return new CompositeName(name);
         }
     }
 
