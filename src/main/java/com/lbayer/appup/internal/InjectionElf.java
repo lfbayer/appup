@@ -16,20 +16,23 @@
 package com.lbayer.appup.internal;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.logging.Logger;
 
 import javax.annotation.Resource;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Easy little functions for handling dependency injection.
  */
 public final class InjectionElf
 {
-    private static final Logger LOGGER = Logger.getLogger(InjectionElf.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(InjectionElf.class);
 
     private InjectionElf()
     {
@@ -56,28 +59,53 @@ public final class InjectionElf
      */
     public static void injectResources(Object instance) throws NamingException, IllegalAccessException, InvocationTargetException
     {
-        LOGGER.fine("Injecting resources into instance: " + instance);
-        for (Method method : instance.getClass().getMethods())
+        LOGGER.trace("Injecting resources into instance: {}", instance);
+
+        injectResourcesForClass(instance, instance.getClass());
+    }
+
+    private static void injectResourcesForClass(Object instance, Class<?> clazz) throws NamingException, IllegalAccessException, InvocationTargetException
+    {
+        // inject into the super class first
+        Class<?> superclass = clazz.getSuperclass();
+        if (superclass != null)
+        {
+            injectResourcesForClass(instance, superclass);
+        }
+
+        for (Field field : clazz.getDeclaredFields())
+        {
+            Resource resource = field.getAnnotation(Resource.class);
+            if (resource != null)
+            {
+                String resourceName = getResourceName(resource, field.getType());
+
+                LOGGER.debug("Injecting resource in field: {}#{}({})", instance.getClass().getName(), field.getName(), resourceName);
+
+                Object value = InitialContext.doLookup(resourceName);
+                if (value == null)
+                {
+                    throw new IllegalStateException(String.format("Injection resource missing for field: %s#%s(%s)", instance.getClass().getName(), field.getName(), resourceName));
+                }
+
+                if (!field.isAccessible())
+                {
+                    field.setAccessible(true);
+                }
+
+                field.set(instance, value);
+            }
+        }
+
+        for (Method method : clazz.getDeclaredMethods())
         {
             Class<?>[] types = method.getParameterTypes();
             Resource resource = method.getAnnotation(Resource.class);
             if (resource != null && types.length == 1)
             {
-                String resourceName = resource.name();
-                if (resourceName == null || resourceName.isEmpty())
-                {
-                    Class<?> type = resource.type();
-                    if (type != null && type != Object.class)
-                    {
-                        resourceName = type.getName();
-                    }
-                    else
-                    {
-                        resourceName = types[0].getName();
-                    }
-                }
+                String resourceName = getResourceName(resource, types[0]);
 
-                LOGGER.fine(String.format("Injecting resource: %s#%s(%s)", instance.getClass().getName(), method.getName(), resourceName));
+                LOGGER.debug("Injecting resource: {}#{}({})", instance.getClass().getName(), method.getName(), resourceName);
 
                 Object value = InitialContext.doLookup(resourceName);
                 if (value == null)
@@ -85,8 +113,32 @@ public final class InjectionElf
                     throw new IllegalStateException(String.format("Injection resource missing for: %s#%s(%s)", instance.getClass().getName(), method.getName(), resourceName));
                 }
 
+                if (!method.isAccessible())
+                {
+                    method.setAccessible(true);
+                }
+
                 method.invoke(instance, value);
             }
         }
+    }
+
+    private static String getResourceName(Resource resource, Class<?> parameterType)
+    {
+        String resourceName = resource.name();
+        if (resourceName.isEmpty())
+        {
+            Class<?> type = resource.type();
+            if (type != Object.class)
+            {
+                resourceName = type.getName();
+            }
+            else
+            {
+                resourceName = parameterType.getName();
+            }
+        }
+
+        return resourceName;
     }
 }

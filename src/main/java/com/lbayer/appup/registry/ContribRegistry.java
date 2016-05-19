@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 
+import javax.annotation.PostConstruct;
 import javax.naming.NamingException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -173,6 +174,7 @@ public class ContribRegistry implements IContribRegistry
             {
                 T instance = (T) createClass(name).newInstance();
                 InjectionElf.injectResources(instance);
+                InjectionElf.invokeMethodsWithAnnotation(PostConstruct.class, instance);
                 return instance;
             }
             catch (InstantiationException | IllegalAccessException | InvocationTargetException | NamingException e)

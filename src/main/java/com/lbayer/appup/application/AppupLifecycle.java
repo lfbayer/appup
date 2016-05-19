@@ -15,9 +15,6 @@
  */
 package com.lbayer.appup.application;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ListIterator;
@@ -26,7 +23,6 @@ import java.util.function.BiConsumer;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
-import com.lbayer.appup.internal.InjectionElf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,6 +107,8 @@ public class AppupLifecycle
         {
             try
             {
+                LOGGER.debug("Starting lifecycle: {}", lifecycleInstance);
+
                 injectResources(lifecycleInstance);
 
                 invokeMethodsWithAnnotation(PostConstruct.class, lifecycleInstance);
@@ -156,6 +154,8 @@ public class AppupLifecycle
             Object object = iter.previous();
             try
             {
+                LOGGER.debug("Stopping lifecycle: {}", object);
+
                 invokeMethodsWithAnnotation(PreDestroy.class, object);
             }
             catch (Throwable t)

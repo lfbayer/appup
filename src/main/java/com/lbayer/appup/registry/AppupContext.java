@@ -18,15 +18,14 @@ package com.lbayer.appup.registry;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 import javax.naming.Binding;
@@ -44,19 +43,22 @@ import javax.naming.event.NamingEvent;
 import javax.naming.event.NamingListener;
 import javax.naming.event.ObjectChangeListener;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static com.lbayer.appup.internal.InjectionElf.injectResources;
 import static com.lbayer.appup.internal.InjectionElf.invokeMethodsWithAnnotation;
 
 class AppupContext implements Context, EventContext
 {
-    private static final Logger LOGGER = Logger.getLogger(AppupContext.class.getName());
+    private static final Logger LOGGER = LoggerFactory.getLogger(AppupContext.class);
 
-    private Map<String, List<AppupContext.Registration>> registrations;
-    private Map<String, List<ObjectChangeListener>> listeners;
+    private final Map<String, List<AppupContext.Registration>> registrations;
+    private final Map<String, List<ObjectChangeListener>> listeners;
 
-    private ThreadLocal<Set<String>> currentLookups = ThreadLocal.withInitial(HashSet::new);
+    private final ThreadLocal<Set<String>> currentLookups = ThreadLocal.withInitial(LinkedHashSet::new);
 
-    public AppupContext()
+    AppupContext()
     {
         registrations = new HashMap<>();
         listeners = new HashMap<>();
@@ -127,13 +129,27 @@ class AppupContext implements Context, EventContext
     @Override
     public Object lookup(Name name) throws NamingException
     {
-        return lookup(name.toString());
+        String key;
+
+        int last = name.size() - 1;
+        if (name.getPrefix(last).toString().equals("java:comp/env"))
+        {
+            key = name.get(last);
+
+            LOGGER.debug("Name translated for lookup: {} -> {}", name.toString(), key);
+        }
+        else
+        {
+            key = name.toString();
+        }
+
+        return lookup(key);
     }
 
     @Override
     public Object lookup(String name) throws NamingException
     {
-        LOGGER.fine("Looking up " + name);
+        LOGGER.debug("Looking up {}", name);
         synchronized (registrations)
         {
             List<AppupContext.Registration> result = registrations.get(name);
@@ -143,46 +159,67 @@ class AppupContext implements Context, EventContext
             }
         }
 
+        // we add the current name to the ThreadLocal of currentLookups so that we can detect recursive calls to lookup the same resource.
         if (!currentLookups.get().add(name))
         {
-            throw new ConfigurationException("Resource dependency cycle detected for object: " + name);
+            // If we get inside here it indicates a dependency cycle in the Resource injections.
+            throw new ConfigurationException("Resource dependency cycle detected for object: " + name + "\n"
+                                                     + currentLookups.get().stream().collect(Collectors.joining("->")));
         }
 
         try
         {
             Class<?> clazz = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+            Object service;
+
             ServiceLoader<?> services = ServiceLoader.load(clazz);
             Iterator<?> iter = services.iterator();
             if (iter.hasNext())
             {
-                Object service = iter.next();
-
+                LOGGER.debug("Creating service from SPI: {}", name);
+                service = iter.next();
+            }
+            else if (!clazz.isInterface())
+            {
                 try
                 {
-                    injectResources(service);
-                    invokeMethodsWithAnnotation(PostConstruct.class, service);
+                    LOGGER.warn("Creating class from explicit lookup: {}", name);
+                    service = clazz.newInstance();
                 }
-                catch (IllegalAccessException | InvocationTargetException e)
+                catch (InstantiationException | IllegalAccessException e)
                 {
-                    LOGGER.log(Level.WARNING, "Can't initialize instance for class: " + name, e);
-                    throw new ConfigurationException("Unable to inject resources into instance: " + service);
+                    LOGGER.warn("Can't create instance of class: " + name, e);
+                    throw new ConfigurationException("Unable to create service instance: " + name);
                 }
-
-                bind(name, service);
-                return service;
             }
+            else
+            {
+                throw new NameNotFoundException(name);
+            }
+
+            try
+            {
+                injectResources(service);
+                invokeMethodsWithAnnotation(PostConstruct.class, service);
+            }
+            catch (IllegalAccessException | InvocationTargetException e)
+            {
+                LOGGER.warn("Can't initialize instance for class: " + name, e);
+                throw new ConfigurationException("Unable to inject resources into instance: " + service);
+            }
+
+            bind(name, service);
+            return service;
         }
         catch (ClassNotFoundException e)
         {
-            LOGGER.log(Level.WARNING, "Can't load class: " + name, e);
+            LOGGER.warn("Can't load class: " + name, e);
             throw new NameNotFoundException(name);
         }
         finally
         {
             currentLookups.get().remove(name);
         }
-
-        throw new NameNotFoundException(name);
     }
 
     @Override
@@ -194,7 +231,7 @@ class AppupContext implements Context, EventContext
     @Override
     public void bind(String name, Object obj) throws NamingException
     {
-        LOGGER.fine("Binding " + name);
+        LOGGER.debug("Binding {}", name);
 
         Registration registration;
 
@@ -244,7 +281,7 @@ class AppupContext implements Context, EventContext
 
             if (result.size() > 1)
             {
-                LOGGER.warning("More than one registration for this name: " + name);
+                LOGGER.warn("More than one registration for this name: {}", name);
             }
 
             registration = result.get(0);
