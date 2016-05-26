@@ -82,10 +82,14 @@ public final class InjectionElf
 
                 LOGGER.debug("Injecting resource in field: {}#{}({})", instance.getClass().getName(), field.getName(), resourceName);
 
-                Object value = InitialContext.doLookup(resourceName);
-                if (value == null)
+                Object value;
+                try
                 {
-                    throw new IllegalStateException(String.format("Injection resource missing for field: %s#%s(%s)", instance.getClass().getName(), field.getName(), resourceName));
+                    value = InitialContext.doLookup(resourceName);
+                }
+                catch (NamingException e)
+                {
+                    throw new IllegalStateException(String.format("Injection resource missing for field: %s#%s(%s)", instance.getClass().getName(), field.getName(), resourceName), e);
                 }
 
                 if (!field.isAccessible())
@@ -107,10 +111,14 @@ public final class InjectionElf
 
                 LOGGER.debug("Injecting resource: {}#{}({})", instance.getClass().getName(), method.getName(), resourceName);
 
-                Object value = InitialContext.doLookup(resourceName);
-                if (value == null)
+                Object value;
+                try
                 {
-                    throw new IllegalStateException(String.format("Injection resource missing for: %s#%s(%s)", instance.getClass().getName(), method.getName(), resourceName));
+                    value = InitialContext.doLookup(resourceName);
+                }
+                catch (NamingException e)
+                {
+                    throw new IllegalStateException(String.format("Injection resource missing for: %s#%s(%s)", instance.getClass().getName(), method.getName(), resourceName), e);
                 }
 
                 if (!method.isAccessible())
