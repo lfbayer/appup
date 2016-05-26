@@ -25,9 +25,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.Resource;
 import javax.naming.Binding;
 import javax.naming.CompositeName;
 import javax.naming.ConfigurationException;
@@ -55,6 +57,9 @@ class AppupContext implements Context, EventContext
 
     private final Map<String, List<AppupContext.Registration>> registrations;
     private final Map<String, List<ObjectChangeListener>> listeners;
+
+    /** Lock that only allows a single service to be instantiated and initialized at a time */
+    private final ReentrantLock writeLock = new ReentrantLock();
 
     private final ThreadLocal<Set<String>> currentLookups = ThreadLocal.withInitial(LinkedHashSet::new);
 
@@ -120,9 +125,18 @@ class AppupContext implements Context, EventContext
     @Override
     public void close() throws NamingException
     {
-        synchronized (registrations)
+        writeLock.lock();
+        try
         {
-            registrations.clear();
+            synchronized (registrations)
+            {
+                LOGGER.debug("AppupContext closing");
+                registrations.clear();
+            }
+        }
+        finally
+        {
+            writeLock.unlock();
         }
     }
 
@@ -146,10 +160,8 @@ class AppupContext implements Context, EventContext
         return lookup(key);
     }
 
-    @Override
-    public Object lookup(String name) throws NamingException
+    private Object getRegisteredObject(String name)
     {
-        LOGGER.debug("Looking up {}", name);
         synchronized (registrations)
         {
             List<AppupContext.Registration> result = registrations.get(name);
@@ -157,6 +169,19 @@ class AppupContext implements Context, EventContext
             {
                 return result.get(0).object;
             }
+        }
+
+        return null;
+    }
+    @Override
+    public Object lookup(String name) throws NamingException
+    {
+        LOGGER.debug("Looking up {}", name);
+
+        Object service = getRegisteredObject(name);
+        if (service != null)
+        {
+            return service;
         }
 
         // we add the current name to the ThreadLocal of currentLookups so that we can detect recursive calls to lookup the same resource.
@@ -169,47 +194,67 @@ class AppupContext implements Context, EventContext
 
         try
         {
-            Class<?> clazz = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
-            Object service;
-
-            ServiceLoader<?> services = ServiceLoader.load(clazz);
-            Iterator<?> iter = services.iterator();
-            if (iter.hasNext())
-            {
-                LOGGER.debug("Creating service from SPI: {}", name);
-                service = iter.next();
-            }
-            else if (!clazz.isInterface())
-            {
-                try
-                {
-                    LOGGER.warn("Creating class from explicit lookup: {}", name);
-                    service = clazz.newInstance();
-                }
-                catch (InstantiationException | IllegalAccessException e)
-                {
-                    LOGGER.warn("Can't create instance of class: " + name, e);
-                    throw new ConfigurationException("Unable to create service instance: " + name);
-                }
-            }
-            else
-            {
-                throw new NameNotFoundException(name);
-            }
-
+            writeLock.lock();
             try
             {
-                injectResources(service);
-                invokeMethodsWithAnnotation(PostConstruct.class, service);
-            }
-            catch (IllegalAccessException | InvocationTargetException e)
-            {
-                LOGGER.warn("Can't initialize instance for class: " + name, e);
-                throw new ConfigurationException("Unable to inject resources into instance: " + service);
-            }
+                // check again, since it might have been added before we acquired this lock.
+                service = getRegisteredObject(name);
+                if (service != null)
+                {
+                    return service;
+                }
 
-            bind(name, service);
-            return service;
+                Class<?> clazz = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
+
+                ServiceLoader<?> services = ServiceLoader.load(clazz);
+                Iterator<?> iter = services.iterator();
+                if (iter.hasNext())
+                {
+                    LOGGER.debug("Creating service from SPI: {}", name);
+                    service = iter.next();
+                }
+                else if (!clazz.isInterface())
+                {
+                    Resource resource = clazz.getAnnotation(Resource.class);
+                    if (resource == null)
+                    {
+                        throw new NameNotFoundException(name);
+                    }
+
+                    try
+                    {
+                        LOGGER.debug("Creating class from class annotation: {}", name);
+                        service = clazz.newInstance();
+                    }
+                    catch (InstantiationException | IllegalAccessException e)
+                    {
+                        LOGGER.warn("Can't create instance of class: " + name, e);
+                        throw new ConfigurationException("Unable to create service instance: " + name);
+                    }
+                }
+                else
+                {
+                    throw new NameNotFoundException(name);
+                }
+
+                try
+                {
+                    injectResources(service);
+                    invokeMethodsWithAnnotation(PostConstruct.class, service);
+                }
+                catch (IllegalAccessException | InvocationTargetException e)
+                {
+                    LOGGER.warn("Can't initialize instance for class: " + name, e);
+                    throw new ConfigurationException("Unable to inject resources into instance: " + service);
+                }
+
+                bind(name, service);
+                return service;
+            }
+            finally
+            {
+                writeLock.unlock();
+            }
         }
         catch (ClassNotFoundException e)
         {
@@ -235,17 +280,25 @@ class AppupContext implements Context, EventContext
 
         Registration registration;
 
-        synchronized (registrations)
+        writeLock.lock();
+        try
         {
-            List<AppupContext.Registration> result = registrations.get(name);
-            if (result == null)
+            synchronized (registrations)
             {
-                result = new ArrayList<>();
-                registrations.put(name, result);
-            }
+                List<AppupContext.Registration> result = registrations.get(name);
+                if (result == null)
+                {
+                    result = new ArrayList<>();
+                    registrations.put(name, result);
+                }
 
-            registration = new Registration(name, obj);
-            result.add(registration);
+                registration = new Registration(name, obj);
+                result.add(registration);
+            }
+        }
+        finally
+        {
+            writeLock.unlock();
         }
 
         synchronized (listeners)
@@ -271,20 +324,29 @@ class AppupContext implements Context, EventContext
     public void unbind(String name) throws NamingException
     {
         Registration registration;
-        synchronized (registrations)
+
+        writeLock.lock();
+        try
         {
-            List<AppupContext.Registration> result = registrations.remove(name);
-            if (result == null || result.isEmpty())
+            synchronized (registrations)
             {
-                return;
-            }
+                List<AppupContext.Registration> result = registrations.remove(name);
+                if (result == null || result.isEmpty())
+                {
+                    return;
+                }
 
-            if (result.size() > 1)
-            {
-                LOGGER.warn("More than one registration for this name: {}", name);
-            }
+                if (result.size() > 1)
+                {
+                    LOGGER.warn("More than one registration for this name: {}", name);
+                }
 
-            registration = result.get(0);
+                registration = result.get(0);
+            }
+        }
+        finally
+        {
+            writeLock.unlock();
         }
 
         synchronized (listeners)

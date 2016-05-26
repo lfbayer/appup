@@ -193,6 +193,11 @@ public class ContribRegistry implements IContribRegistry
                 throw new ContribException("No such attribute: " + name);
             }
 
+            if (classname.isEmpty())
+            {
+                throw new ContribException("Attribute is empty: " + name);
+            }
+
             try
             {
                 return (Class<T>) classLoader.loadClass(classname);
