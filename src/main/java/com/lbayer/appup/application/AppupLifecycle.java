@@ -53,6 +53,11 @@ public class AppupLifecycle
      */
     public boolean start()
     {
+        return start(false);
+    }
+
+    public boolean start(boolean continueOnFailure)
+    {
         if (startedInstances != null)
         {
             throw new IllegalStateException("Lifecycle already started");
@@ -124,6 +129,11 @@ public class AppupLifecycle
                 else
                 {
                     LOGGER.error("Error starting lifecycle instance " + lifecycleInstance.getClass().getName(), t);
+                }
+
+                if (!continueOnFailure)
+                {
+                    break;
                 }
             }
         }
