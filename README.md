@@ -1,4 +1,6 @@
 # appup
+
+[![][Build Status img]][Build Status]
 [![][license img]][license]
 [![][Maven Central img]][Maven Central]
 [![][Javadocs img]][Javadocs]
@@ -61,6 +63,9 @@ manifest header, and loads the appropriate platform's library.
 #### Dependency Injection
 
 Uses ``javax.annotation.Resource`` annotation to automatically inject services into services.
+
+[Build Status]:https://travis-ci.org/lfbayer/appup
+[Build Status img]:https://travis-ci.org/lfbayer/appup.svg?branch=master
 
 [license]:LICENSE
 [license img]:https://img.shields.io/badge/license-Apache%202-blue.svg
