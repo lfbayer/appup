@@ -1,4 +1,8 @@
 # appup
+[![][license img]][license]
+[![][Maven Central img]][Maven Central]
+[![][Javadocs img]][Javadocs]
+
 A Java application bootstrap library
 
 #### Overview
@@ -57,3 +61,13 @@ manifest header, and loads the appropriate platform's library.
 #### Dependency Injection
 
 Uses ``javax.annotation.Resource`` annotation to automatically inject services into services.
+
+[license]:LICENSE
+[license img]:https://img.shields.io/badge/license-Apache%202-blue.svg
+   
+[Maven Central]:https://maven-badges.herokuapp.com/maven-central/com.lbayer/appup
+[Maven Central img]:https://maven-badges.herokuapp.com/maven-central/com.lbayer/appup/badge.svg
+   
+[Javadocs]:http://javadoc.io/doc/com.lbayer/appup
+[Javadocs img]:http://javadoc.io/badge/com.lbayer/appup.svg
+ 
