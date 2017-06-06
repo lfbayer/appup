@@ -17,10 +17,13 @@ package com.lbayer.appup.application;
 
 public interface IAppupRuntime
 {
-    String PROP_STARTTIME = "appup.startTime";
     String PROP_CONFDIR = "appup.confDir";
     String PROP_LIBDIR = "appup.libDir";
     String PROP_STARTCLASSES = "appup.startClasses";
 
+    /**
+     * Request a graceful exit of the application, and set the exit code to return.
+     * @param exitCode The exit code.
+     */
     void exit(int exitCode);
 }

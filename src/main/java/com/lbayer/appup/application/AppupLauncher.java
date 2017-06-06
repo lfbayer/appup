@@ -86,8 +86,6 @@ public class AppupLauncher implements IAppupRuntime
 
     public int launch(File configFile, String[] arguments) throws Exception
     {
-        System.setProperty(IAppupRuntime.PROP_STARTTIME, Long.toString(System.currentTimeMillis()));
-
         installHooks();
         try
         {
