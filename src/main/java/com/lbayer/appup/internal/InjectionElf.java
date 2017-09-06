@@ -68,6 +68,11 @@ public final class InjectionElf
     {
         // inject into the super class first
         Class<?> superclass = clazz.getSuperclass();
+        if (superclass == Object.class)
+        {
+            return;
+        }
+
         if (superclass != null)
         {
             injectResourcesForClass(instance, superclass);
