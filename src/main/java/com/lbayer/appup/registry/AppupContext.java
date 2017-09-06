@@ -228,8 +228,9 @@ class AppupContext implements Context, EventContext
                     }
                     catch (InstantiationException | IllegalAccessException e)
                     {
-                        LOGGER.warn("Can't create instance of class: " + name, e);
-                        throw new ConfigurationException("Unable to create service instance: " + name);
+                        ConfigurationException exception = new ConfigurationException("Unable to create service instance: " + name);
+                        exception.setRootCause(e);
+                        throw exception;
                     }
                 }
                 else
@@ -244,8 +245,9 @@ class AppupContext implements Context, EventContext
                 }
                 catch (IllegalAccessException | InvocationTargetException e)
                 {
-                    LOGGER.warn("Can't initialize instance for class: " + name, e);
-                    throw new ConfigurationException("Unable to inject resources into instance: " + service);
+                    ConfigurationException exception = new ConfigurationException("Unable to inject resources into instance: " + service);
+                    exception.setRootCause(e);
+                    throw exception;
                 }
 
                 bind(name, service);
@@ -258,8 +260,9 @@ class AppupContext implements Context, EventContext
         }
         catch (ClassNotFoundException e)
         {
-            LOGGER.warn("Can't load class: " + name, e);
-            throw new NameNotFoundException(name);
+            NameNotFoundException exception = new NameNotFoundException(name);
+            exception.setRootCause(e);
+            throw exception;
         }
         finally
         {
