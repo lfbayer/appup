@@ -111,17 +111,20 @@ public class AppupLauncher implements IAppupRuntime
 
             importProperties();
 
-            URL[] urls = ((URLClassLoader) getClass().getClassLoader()).getURLs();
+            if (System.getProperty("java.version").startsWith("1."))
+            {
+                URL[] urls = ((URLClassLoader) getClass().getClassLoader()).getURLs();
 
-            File libsDir = new File(System.getProperty(IAppupRuntime.PROP_LIBDIR, ".lib"));
-            libsDir.mkdirs();
-            System.setProperty(LIB_PATH, libsDir.getPath() + File.pathSeparator + System.getProperty(LIB_PATH));
+                File libsDir = new File(System.getProperty(IAppupRuntime.PROP_LIBDIR, ".lib"));
+                libsDir.mkdirs();
+                System.setProperty(LIB_PATH, libsDir.getPath() + File.pathSeparator + System.getProperty(LIB_PATH));
 
-            NativeCodeManager nativeCodeManager = new NativeCodeManager(libsDir);
-            nativeCodeManager.initialize(urls);
-
-            System.setProperty("osgi.os", NativeCodeManager.OS);
-            System.setProperty("osgi.arch", NativeCodeManager.ARCH);
+                NativeCodeManager nativeCodeManager = new NativeCodeManager(libsDir);
+                nativeCodeManager.initialize(urls);
+    
+                System.setProperty("osgi.os", NativeCodeManager.OS);
+                System.setProperty("osgi.arch", NativeCodeManager.ARCH);
+            }
 
             ContribRegistry contribRegistry = new ContribRegistry(getClass().getClassLoader());
             contribRegistry.initializeFromClassLoader();
