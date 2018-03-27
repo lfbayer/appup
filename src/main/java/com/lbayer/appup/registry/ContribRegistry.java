@@ -15,22 +15,6 @@
  */
 package com.lbayer.appup.registry;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.net.JarURLConnection;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
-
-import javax.annotation.PostConstruct;
-import javax.naming.NamingException;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-
 import com.lbayer.appup.internal.InjectionElf;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
@@ -38,16 +22,25 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
-
+import javax.annotation.PostConstruct;
+import javax.naming.NamingException;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
+import java.util.*;
 
 public class ContribRegistry implements IContribRegistry
 {
-    private List<Document> doms;
     private ClassLoader classLoader;
 
     public ContribRegistry(ClassLoader classLoader)
     {
-        doms = new ArrayList<>();
         this.classLoader = classLoader;
     }
 
@@ -78,33 +71,46 @@ public class ContribRegistry implements IContribRegistry
     @Override
     public IContribElement[] getContribElementsFor(String contribTypeId)
     {
-        List<IContribElement> results = new ArrayList<>();
-        for (Document dom : doms)
+        List<ContribElement> results = contribs.get(contribTypeId);
+        if (results == null)
         {
-            String owner = (String) dom.getUserData("appup.contrib.owner");
-            URL ownerURL = (URL) dom.getUserData("appup.contrib.ownerURL");
-
-            NodeList extensions = dom.getElementsByTagName("extension"); // .getChildNodes();
-            for (int j = 0; j < extensions.getLength(); j++)
-            {
-                Node extension = extensions.item(j);
-                Node point = extension.getAttributes().getNamedItem("point");
-                if (point != null && point.getNodeValue().equals(contribTypeId))
-                {
-                    NodeList children = extension.getChildNodes();
-                    for (int k = 0; k < children.getLength(); k++)
-                    {
-                        Node elem = children.item(k);
-                        if (elem.getNodeType() == Node.ELEMENT_NODE)
-                        {
-                            results.add(new ContribElement(ownerURL, owner, elem));
-                        }
-                    }
-                }
-            }
+            return new IContribElement[0];
         }
 
         return results.toArray(new IContribElement[results.size()]);
+    }
+
+    private Map<String, List<ContribElement>> contribs = new HashMap<>();
+
+    private List<ContribElement> createElements(URL ownerURL, String owner, Node extension)
+    {
+        List<ContribElement> result = new ArrayList<>();
+
+        NodeList children = extension.getChildNodes();
+        for (int k = 0; k < children.getLength(); k++)
+        {
+            Node elem = children.item(k);
+            if (elem.getNodeType() == Node.ELEMENT_NODE)
+            {
+                List<ContribElement> childContribElements = null;
+                if (elem.hasChildNodes())
+                {
+                    childContribElements = createElements(ownerURL, owner, elem);
+                }
+
+                NamedNodeMap attrs = elem.getAttributes();
+                Map<String, String> attrsMap = new HashMap<>();
+                for (int i = 0; i < attrs.getLength(); i++)
+                {
+                    Node attr = attrs.item(i);
+                    attrsMap.put(attr.getNodeName(), attr.getNodeValue());
+                }
+
+                result.add(new ContribElement(ownerURL, owner, elem.getNodeName(), attrsMap, childContribElements));
+            }
+        }
+
+        return result;
     }
 
     public void register(URL ownerURL, String owner, InputStream pluginConfig)
@@ -113,9 +119,22 @@ public class ContribRegistry implements IContribRegistry
         {
             DocumentBuilder db = DocumentBuilderFactory.newInstance().newDocumentBuilder();
             Document dom = db.parse(pluginConfig);
-            dom.setUserData("appup.contrib.owner", owner, null);
-            dom.setUserData("appup.contrib.ownerURL", ownerURL, null);
-            doms.add(dom);
+
+            NodeList extensions = dom.getElementsByTagName("extension"); // .getChildNodes();
+            for (int j = 0; j < extensions.getLength(); j++)
+            {
+                Node extension = extensions.item(j);
+                Node point = extension.getAttributes().getNamedItem("point");
+                if (point == null)
+                {
+                    continue;
+                }
+
+                String contribTypeId = point.getNodeValue();
+
+                List<ContribElement> contribElems = contribs.computeIfAbsent(contribTypeId, k -> new ArrayList<>());
+                contribElems.addAll(createElements(ownerURL, owner, extension));
+            }
         }
         catch (ParserConfigurationException | SAXException | IOException e)
         {
@@ -125,15 +144,19 @@ public class ContribRegistry implements IContribRegistry
 
     private class ContribElement implements IContribElement
     {
-        private final Node node;
+        private final Map<String, String> attrs;
+        private final String name;
         private final String owner;
         private final URL ownerURL;
+        private final List<ContribElement> children;
 
-        public ContribElement(URL ownerURL, String owner, Node node)
+        private ContribElement(URL ownerURL, String owner, String name, Map<String, String> attrs, List<ContribElement> children)
         {
             this.ownerURL = ownerURL;
             this.owner = owner;
-            this.node = node;
+            this.name = name;
+            this.attrs = attrs;
+            this.children = children;
         }
 
         @Override
@@ -151,19 +174,7 @@ public class ContribRegistry implements IContribRegistry
         @Override
         public String getAttribute(String name)
         {
-            NamedNodeMap attrs = node.getAttributes();
-            if (attrs == null)
-            {
-                return null;
-            }
-
-            Node item = attrs.getNamedItem(name);
-            if (item != null)
-            {
-                return item.getNodeValue();
-            }
-
-            return null;
+            return attrs.get(name);
         }
 
         @SuppressWarnings("unchecked")
@@ -211,28 +222,15 @@ public class ContribRegistry implements IContribRegistry
         @Override
         public String getName()
         {
-            return node.getNodeName();
+            return name;
         }
 
         @Override
         public IContribElement[] getChildren(String string)
         {
-            List<IContribElement> results = new ArrayList<>();
-
-            NodeList children = node.getChildNodes();
-            for (int j = 0; j < children.getLength(); j++)
-            {
-                Node child = children.item(j);
-                if (child.getNodeType() == Node.ELEMENT_NODE)
-                {
-                    if (string == null || child.getNodeName().equals(string))
-                    {
-                        results.add(new ContribElement(ownerURL, owner, children.item(j)));
-                    }
-                }
-            }
-
-            return results.toArray(new IContribElement[results.size()]);
+            return children.stream()
+                    .filter((it) -> it.name.equals(string))
+                    .toArray(IContribElement[]::new);
         }
 
         @Override

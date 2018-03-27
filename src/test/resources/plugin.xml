@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.2"?>
+<plugin>
+    <extension point="org.ziptie.server.core.jobs.backupComplete">
+        <listener class="org.ziptie.server.job.backup.BackupResultsTrapSender"/>
+    </extension>
+    <extension point="nested">
+        <top value="top-value">
+            <middle value="middle-value">
+                <bottom value="bottom-value"/>
+            </middle>
+            <empty>
+            </empty>
+        </top>
+    </extension>
+
+    <extension point="object">
+        <listener class="java.lang.Object"/>
+    </extension>
+    <extension point="bad-object">
+        <listener class="not.a.ClassName"/>
+    </extension>
+    <!--extension without "point" attribute-->
+    <extension>
+    </extension>
+</plugin>
