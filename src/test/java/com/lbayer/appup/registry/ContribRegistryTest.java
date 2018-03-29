@@ -45,6 +45,9 @@ public class ContribRegistryTest
         Object obj = elements[0].createInstance("class");
         Assert.assertNotNull(obj);
         Assert.assertEquals(Object.class, obj.getClass());
+
+        IContribElement[] nothing = elements[0].getChildren("nothing");
+        Assert.assertEquals("getChildren with no children should return empty list", 0, nothing.length);
     }
 
     @Test(expected = ContribException.class)

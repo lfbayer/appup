@@ -92,10 +92,14 @@ public class ContribRegistry implements IContribRegistry
             Node elem = children.item(k);
             if (elem.getNodeType() == Node.ELEMENT_NODE)
             {
-                List<ContribElement> childContribElements = null;
+                List<ContribElement> childContribElements;
                 if (elem.hasChildNodes())
                 {
                     childContribElements = createElements(ownerURL, owner, elem);
+                }
+                else
+                {
+                    childContribElements = Collections.emptyList();
                 }
 
                 NamedNodeMap attrs = elem.getAttributes();
