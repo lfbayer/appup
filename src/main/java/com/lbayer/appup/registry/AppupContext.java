@@ -17,6 +17,7 @@ package com.lbayer.appup.registry;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Iterator;
@@ -160,28 +161,57 @@ class AppupContext implements Context, EventContext
         return lookup(key);
     }
 
-    private Object getRegisteredObject(String name)
+    private List<Object> getRegisteredObjects(String name)
     {
         synchronized (registrations)
         {
             List<AppupContext.Registration> result = registrations.get(name);
             if (result != null && !result.isEmpty())
             {
-                return result.get(0).object;
+                List<Object> objects = new ArrayList<>(result.size());
+                for (AppupContext.Registration registration : result)
+                {
+                    objects.add(registration.object);
+                }
+
+                return objects;
             }
         }
 
         return null;
     }
+
     @Override
     public Object lookup(String name) throws NamingException
     {
+        return lookupMultiple(name).get(0);
+    }
+
+    private void initializeService(String name, Object service) throws NamingException
+    {
+        try
+        {
+            injectResources(service);
+            invokeMethodsWithAnnotation(PostConstruct.class, service);
+        }
+        catch (IllegalAccessException | InvocationTargetException e)
+        {
+            ConfigurationException exception = new ConfigurationException("Unable to inject resources into instance: " + service);
+            exception.setRootCause(e);
+            throw exception;
+        }
+
+        bind(name, service);
+    }
+
+    private List<Object> lookupMultiple(String name) throws NamingException
+    {
         LOGGER.debug("Looking up {}", name);
 
-        Object service = getRegisteredObject(name);
-        if (service != null)
+        List<Object> registeredObjects = getRegisteredObjects(name);
+        if (registeredObjects != null)
         {
-            return service;
+            return registeredObjects;
         }
 
         // we add the current name to the ThreadLocal of currentLookups so that we can detect recursive calls to lookup the same resource.
@@ -198,10 +228,10 @@ class AppupContext implements Context, EventContext
             try
             {
                 // check again, since it might have been added before we acquired this lock.
-                service = getRegisteredObject(name);
-                if (service != null)
+                registeredObjects = getRegisteredObjects(name);
+                if (registeredObjects != null)
                 {
-                    return service;
+                    return registeredObjects;
                 }
 
                 Class<?> clazz = Class.forName(name, true, Thread.currentThread().getContextClassLoader());
@@ -211,7 +241,16 @@ class AppupContext implements Context, EventContext
                 if (iter.hasNext())
                 {
                     LOGGER.debug("Creating service from SPI: {}", name);
-                    service = iter.next();
+
+                    List<Object> result = new ArrayList<>();
+                    do
+                    {
+                        Object service = iter.next();
+                        initializeService(name, service);
+                        result.add(service);
+                    } while (iter.hasNext());
+
+                    return result;
                 }
                 else if (!clazz.isInterface())
                 {
@@ -224,7 +263,11 @@ class AppupContext implements Context, EventContext
                     try
                     {
                         LOGGER.debug("Creating class from class annotation: {}", name);
-                        service = clazz.newInstance();
+                        Object service = clazz.newInstance();
+
+                        initializeService(name, service);
+
+                        return Collections.singletonList(service);
                     }
                     catch (InstantiationException | IllegalAccessException e)
                     {
@@ -237,21 +280,6 @@ class AppupContext implements Context, EventContext
                 {
                     throw new NameNotFoundException(name);
                 }
-
-                try
-                {
-                    injectResources(service);
-                    invokeMethodsWithAnnotation(PostConstruct.class, service);
-                }
-                catch (IllegalAccessException | InvocationTargetException e)
-                {
-                    ConfigurationException exception = new ConfigurationException("Unable to inject resources into instance: " + service);
-                    exception.setRootCause(e);
-                    throw exception;
-                }
-
-                bind(name, service);
-                return service;
             }
             finally
             {
@@ -288,13 +316,7 @@ class AppupContext implements Context, EventContext
         {
             synchronized (registrations)
             {
-                List<AppupContext.Registration> result = registrations.get(name);
-                if (result == null)
-                {
-                    result = new ArrayList<>();
-                    registrations.put(name, result);
-                }
-
+                List<AppupContext.Registration> result = registrations.computeIfAbsent(name, k -> new ArrayList<>());
                 registration = new Registration(name, obj);
                 result.add(registration);
             }
@@ -376,6 +398,9 @@ class AppupContext implements Context, EventContext
     {
         synchronized (registrations)
         {
+            // force lookup
+            lookupMultiple(name);
+
             List<AppupContext.Registration> regs = registrations.get(name);
             if (regs == null || regs.isEmpty())
             {
