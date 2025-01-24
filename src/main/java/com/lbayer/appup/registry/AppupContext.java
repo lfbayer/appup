@@ -396,11 +396,11 @@ class AppupContext implements Context, EventContext
     @Override
     public NamingEnumeration<Binding> listBindings(String name) throws NamingException
     {
+        // force lookup
+        lookupMultiple(name);
+
         synchronized (registrations)
         {
-            // force lookup
-            lookupMultiple(name);
-
             List<AppupContext.Registration> regs = registrations.get(name);
             if (regs == null || regs.isEmpty())
             {
