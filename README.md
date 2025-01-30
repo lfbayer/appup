@@ -64,8 +64,8 @@ manifest header, and loads the appropriate platform's library.
 
 Uses ``javax.annotation.Resource`` annotation to automatically inject services into services.
 
-[Build Status]:https://travis-ci.org/lfbayer/appup
-[Build Status img]:https://travis-ci.org/lfbayer/appup.svg?branch=master
+[Build Status]:https://github.com/lfbayer/appup/actions/workflows/gradle.yml
+[Build Status img]:https://github.com/lfbayer/appup/actions/workflows/gradle.yml/badge.svg?branch=master
 
 [license]:LICENSE
 [license img]:https://img.shields.io/badge/license-Apache%202-blue.svg
