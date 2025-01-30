@@ -27,7 +27,6 @@ import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
@@ -71,13 +70,13 @@ class AppupContext implements Context, EventContext
     }
 
     @Override
-    public void addNamingListener(Name target, int scope, NamingListener l) throws NamingException
+    public void addNamingListener(Name target, int scope, NamingListener l)
     {
         addNamingListener(target.toString(), scope, l);
     }
 
     @Override
-    public void addNamingListener(String target, int scope, NamingListener l) throws NamingException
+    public void addNamingListener(String target, int scope, NamingListener l)
     {
         if (!(l instanceof ObjectChangeListener))
         {
@@ -86,19 +85,14 @@ class AppupContext implements Context, EventContext
 
         synchronized (listeners)
         {
-            List<ObjectChangeListener> list = listeners.get(target);
-            if (list == null)
-            {
-                list = new ArrayList<>();
-                listeners.put(target, list);
-            }
+            List<ObjectChangeListener> list = listeners.computeIfAbsent(target, k -> new ArrayList<>());
 
             list.add((ObjectChangeListener) l);
         }
     }
 
     @Override
-    public void removeNamingListener(NamingListener l) throws NamingException
+    public void removeNamingListener(NamingListener l)
     {
         synchronized (listeners)
         {
@@ -118,13 +112,13 @@ class AppupContext implements Context, EventContext
     }
 
     @Override
-    public boolean targetMustExist() throws NamingException
+    public boolean targetMustExist()
     {
         return false;
     }
 
     @Override
-    public void close() throws NamingException
+    public void close()
     {
         writeLock.lock();
         try
@@ -151,7 +145,7 @@ class AppupContext implements Context, EventContext
         {
             key = name.get(last);
 
-            LOGGER.debug("Name translated for lookup: {} -> {}", name.toString(), key);
+            LOGGER.debug("Name translated for lookup: {} -> {}", name, key);
         }
         else
         {
@@ -184,7 +178,7 @@ class AppupContext implements Context, EventContext
     @Override
     public Object lookup(String name) throws NamingException
     {
-        return lookupMultiple(name).get(0);
+        return lookupMultiple(name).getFirst();
     }
 
     private void initializeService(String name, Object service) throws NamingException
@@ -214,12 +208,12 @@ class AppupContext implements Context, EventContext
             return registeredObjects;
         }
 
-        // we add the current name to the ThreadLocal of currentLookups so that we can detect recursive calls to lookup the same resource.
+        // we add the current name to the ThreadLocal of currentLookups so that we can detect recursive calls to lookup for the same resource.
         if (!currentLookups.get().add(name))
         {
             // If we get inside here it indicates a dependency cycle in the Resource injections.
             throw new ConfigurationException("Resource dependency cycle detected for object: " + name + "\n"
-                                                     + currentLookups.get().stream().collect(Collectors.joining("->")));
+                                                     + String.join("->", currentLookups.get()));
         }
 
         try
@@ -263,13 +257,13 @@ class AppupContext implements Context, EventContext
                     try
                     {
                         LOGGER.debug("Creating class from class annotation: {}", name);
-                        Object service = clazz.newInstance();
+                        Object service = clazz.getConstructor().newInstance();
 
                         initializeService(name, service);
 
                         return Collections.singletonList(service);
                     }
-                    catch (InstantiationException | IllegalAccessException e)
+                    catch (ReflectiveOperationException e)
                     {
                         ConfigurationException exception = new ConfigurationException("Unable to create service instance: " + name);
                         exception.setRootCause(e);
@@ -299,13 +293,13 @@ class AppupContext implements Context, EventContext
     }
 
     @Override
-    public void bind(Name name, Object obj) throws NamingException
+    public void bind(Name name, Object obj)
     {
         bind(name.toString(), obj);
     }
 
     @Override
-    public void bind(String name, Object obj) throws NamingException
+    public void bind(String name, Object obj)
     {
         LOGGER.debug("Binding {}", name);
 
@@ -340,13 +334,13 @@ class AppupContext implements Context, EventContext
     }
 
     @Override
-    public void unbind(Name name) throws NamingException
+    public void unbind(Name name)
     {
         unbind(name.toString());
     }
 
     @Override
-    public void unbind(String name) throws NamingException
+    public void unbind(String name)
     {
         Registration registration;
 
@@ -366,7 +360,7 @@ class AppupContext implements Context, EventContext
                     LOGGER.warn("More than one registration for this name: {}", name);
                 }
 
-                registration = result.get(0);
+                registration = result.getFirst();
             }
         }
         finally
@@ -412,121 +406,121 @@ class AppupContext implements Context, EventContext
     }
 
     @Override
-    public NameParser getNameParser(Name name) throws NamingException
+    public NameParser getNameParser(Name name)
     {
         return AppupNameParser.NAME_PARSER;
     }
 
     @Override
-    public NameParser getNameParser(String name) throws NamingException
+    public NameParser getNameParser(String name)
     {
         return AppupNameParser.NAME_PARSER;
     }
 
     @Override
-    public void rebind(Name name, Object obj) throws NamingException
+    public void rebind(Name name, Object obj)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void rebind(String name, Object obj) throws NamingException
+    public void rebind(String name, Object obj)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void rename(Name oldName, Name newName) throws NamingException
+    public void rename(Name oldName, Name newName)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void rename(String oldName, String newName) throws NamingException
+    public void rename(String oldName, String newName)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public NamingEnumeration<NameClassPair> list(Name name) throws NamingException
+    public NamingEnumeration<NameClassPair> list(Name name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public NamingEnumeration<NameClassPair> list(String name) throws NamingException
+    public NamingEnumeration<NameClassPair> list(String name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void destroySubcontext(Name name) throws NamingException
+    public void destroySubcontext(Name name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public void destroySubcontext(String name) throws NamingException
+    public void destroySubcontext(String name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Context createSubcontext(Name name) throws NamingException
+    public Context createSubcontext(Name name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Context createSubcontext(String name) throws NamingException
+    public Context createSubcontext(String name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Object lookupLink(Name name) throws NamingException
+    public Object lookupLink(Name name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Object lookupLink(String name) throws NamingException
+    public Object lookupLink(String name)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Name composeName(Name name, Name prefix) throws NamingException
+    public Name composeName(Name name, Name prefix)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public String composeName(String name, String prefix) throws NamingException
+    public String composeName(String name, String prefix)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Object addToEnvironment(String propName, Object propVal) throws NamingException
+    public Object addToEnvironment(String propName, Object propVal)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Object removeFromEnvironment(String propName) throws NamingException
+    public Object removeFromEnvironment(String propName)
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public Hashtable<?, ?> getEnvironment() throws NamingException
+    public Hashtable<?, ?> getEnvironment()
     {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public String getNameInNamespace() throws NamingException
+    public String getNameInNamespace()
     {
         throw new UnsupportedOperationException();
     }
@@ -547,7 +541,7 @@ class AppupContext implements Context, EventContext
         }
 
         @Override
-        public Binding next() throws NamingException
+        public Binding next()
         {
             return nextElement();
         }
@@ -559,13 +553,13 @@ class AppupContext implements Context, EventContext
         }
 
         @Override
-        public boolean hasMore() throws NamingException
+        public boolean hasMore()
         {
             return hasMoreElements();
         }
 
         @Override
-        public void close() throws NamingException
+        public void close()
         {
         }
     }
@@ -581,17 +575,8 @@ class AppupContext implements Context, EventContext
         }
     }
 
-    private static class Registration
+    private record Registration(String name, Object object)
     {
-        Object object;
-        private String name;
-
-        public Registration(String name, Object object)
-        {
-            this.name = name;
-            this.object = object;
-        }
-
         public Binding toBinding()
         {
             return new Binding(name, object.getClass().getName(), object);
